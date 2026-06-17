@@ -28,6 +28,11 @@ export default function Timeline({ compact = false, datasets }: TimelineProps) {
   const total = compareMode && store.syncTime ? globalMaxCount : times.length;
   const max = Math.max(0, total - 1);
 
+  const currentTimestep = dataset
+    ? store.getTimestepFor(dataset.id)
+    : store.timestep;
+  const displayTimestep = Math.min(currentTimestep, max);
+
   const fmt = (v: number) => {
     const a = Math.abs(v);
     if (a >= 1e4 || (a < 1e-3 && a > 0)) return v.toExponential(1);
@@ -55,7 +60,7 @@ export default function Timeline({ compact = false, datasets }: TimelineProps) {
         </button>
         <button
           className="btn h-7 w-7 p-0"
-          onClick={() => store.setTimestep(Math.max(0, store.timestep - 1))}
+          onClick={() => store.setTimestep(Math.max(0, displayTimestep - 1))}
           title="上一帧"
         >
           <ChevronLeft className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -68,7 +73,7 @@ export default function Timeline({ compact = false, datasets }: TimelineProps) {
         </button>
         <button
           className="btn h-7 w-7 p-0"
-          onClick={() => store.setTimestep(Math.min(max, store.timestep + 1))}
+          onClick={() => store.setTimestep(Math.min(max, displayTimestep + 1))}
           title="下一帧"
         >
           <ChevronRight className="h-3.5 w-3.5" strokeWidth={1.5} />
@@ -84,7 +89,7 @@ export default function Timeline({ compact = false, datasets }: TimelineProps) {
 
       <div className="flex-1 flex items-center gap-2">
         <span className="font-mono text-[9px] tabular-nums text-ink-400 w-12 text-right">
-          {fmt(times[Math.min(store.timestep, times.length - 1)])}
+          {fmt(times[Math.min(displayTimestep, times.length - 1)])}
         </span>
         <div className="relative flex-1">
           <input
@@ -92,14 +97,14 @@ export default function Timeline({ compact = false, datasets }: TimelineProps) {
             min={0}
             max={max}
             step={1}
-            value={store.timestep}
+            value={displayTimestep}
             className="w-full"
             onChange={(e) => store.setTimestep(parseInt(e.target.value))}
           />
           <div className="pointer-events-none mt-1 flex justify-between font-mono text-[7px] text-ink-600">
             {total <= 12 &&
               Array.from({ length: total }, (_, i) => (
-                <span key={i} className={i === store.timestep ? "text-accent-cyan" : ""}>
+                <span key={i} className={i === displayTimestep ? "text-accent-cyan" : ""}>
                   |
                 </span>
               ))}
@@ -141,7 +146,7 @@ export default function Timeline({ compact = false, datasets }: TimelineProps) {
           ))}
         </div>
         <span className="font-mono text-[9px] tabular-nums text-accent-cyan ml-1">
-          {store.timestep + 1}/{total}
+          {displayTimestep + 1}/{total}
         </span>
       </div>
     </footer>

@@ -220,9 +220,12 @@ function SectionProbeMarker({
       <mesh geometry={ringGeo} material={ringMat} rotation={[0, Math.PI / 2, 0]} />
       <Html distanceFactor={8} position={[0, 0.12, 0]} center>
         <div
-          className="px-1.5 py-0.5 bg-ink-900/90 border rounded-[2px] font-mono text-[8px] tracking-wider whitespace-nowrap pointer-events-none"
-          style={{ borderColor: probe.color, color: probe.color }}
-          onDoubleClick={() => onRemove(probe.id)}
+          className="px-1.5 py-0.5 bg-ink-900/90 border rounded-[2px] font-mono text-[8px] tracking-wider whitespace-nowrap select-none"
+          style={{ borderColor: probe.color, color: probe.color, cursor: "pointer" }}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            onRemove(probe.id);
+          }}
           title="双击删除"
         >
           {probe.label} {fmt(value.value)}

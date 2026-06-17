@@ -198,6 +198,7 @@ export default function Viewport({
 
   const range = activeRange(dataset, store.activeField, store.rangeOverride, store.autoRange);
   const probes: Probe[] = store.probes;
+  const timestep = store.getTimestepFor(dataset.id);
 
   return (
     <Canvas
@@ -221,7 +222,7 @@ export default function Viewport({
         dataset={dataset}
         mode={store.mode}
         field={store.activeField}
-        timestep={store.timestep}
+        timestep={timestep}
         colormap={store.colormap}
         range={range}
         clip={store.clip}

@@ -27,10 +27,18 @@ export function usePlayback(compare = false) {
     const interval = 1000 / Math.max(0.5, fps);
     const tick = () => {
       const s = useCFDStore.getState();
-      const t = s.timestep;
-      const aTotal = s.getActive()?.times.length ?? 1;
-      const gTotal = compare && s.syncTime ? maxTimestepCount(s.datasets) : aTotal;
-      const maxStep = Math.max(aTotal, gTotal) - 1;
+      const activeDs = s.getActive();
+      let t: number;
+      let maxStep: number;
+      if (s.syncTime || !activeDs) {
+        t = s.timestep;
+        const aTotal = activeDs?.times.length ?? 1;
+        const gTotal = compare && s.syncTime ? maxTimestepCount(s.datasets) : aTotal;
+        maxStep = Math.max(aTotal, gTotal) - 1;
+      } else {
+        t = s.getTimestepFor(activeDs.id);
+        maxStep = Math.max(0, activeDs.times.length - 1);
+      }
       let next = t + 1;
       if (next > maxStep) {
         if (loop) next = 0;

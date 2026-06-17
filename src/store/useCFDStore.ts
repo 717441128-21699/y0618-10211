@@ -32,6 +32,7 @@ interface CFDStore {
   autoRange: boolean;
 
   timestep: number;
+  datasetTimesteps: Record<string, number>;
   playback: PlaybackState;
 
   probes: Probe[];
@@ -68,6 +69,8 @@ interface CFDStore {
   setAutoRange: (v: boolean) => void;
 
   setTimestep: (t: number) => void;
+  setDatasetTimestep: (id: string, t: number) => void;
+  getTimestepFor: (datasetId: string) => number;
   setPlaying: (p: boolean) => void;
   setFps: (f: number) => void;
   setLoop: (l: boolean) => void;
@@ -116,6 +119,7 @@ export const useCFDStore = create<CFDStore>((set, get) => ({
   autoRange: true,
 
   timestep: 0,
+  datasetTimesteps: {},
   playback: { playing: false, fps: 6, loop: true },
 
   probes: [],
@@ -146,21 +150,29 @@ export const useCFDStore = create<CFDStore>((set, get) => ({
       const datasets = exists ? s.datasets.map((d) => (d.id === ds.id ? ds : d)) : [...s.datasets, ds];
       const activeId = s.activeId ?? ds.id;
       const firstField = ds.fields.pressure ? "pressure" : Object.keys(ds.fields)[0] ?? "pressure";
+      const datasetTimesteps = { ...s.datasetTimesteps, [ds.id]: 0 };
       return {
         datasets,
         activeId,
         timestep: 0,
+        datasetTimesteps,
         activeField: s.activeField in ds.fields ? s.activeField : firstField,
         clip: { ...s.clip, position: 0 },
       };
     }),
   addDataset: (ds) =>
-    set((s) => ({ datasets: [...s.datasets, ds], activeId: s.activeId ?? ds.id })),
+    set((s) => ({
+      datasets: [...s.datasets, ds],
+      activeId: s.activeId ?? ds.id,
+      datasetTimesteps: { ...s.datasetTimesteps, [ds.id]: 0 },
+    })),
   removeDataset: (id) =>
     set((s) => {
       const datasets = s.datasets.filter((d) => d.id !== id);
       const activeId = s.activeId === id ? datasets[0]?.id ?? null : s.activeId;
-      return { datasets, activeId };
+      const { [id]: _removed, ...rest } = s.datasetTimesteps;
+      void _removed;
+      return { datasets, activeId, datasetTimesteps: rest };
     }),
   setActive: (id) => set({ activeId: id }),
 
@@ -170,7 +182,31 @@ export const useCFDStore = create<CFDStore>((set, get) => ({
   setRange: (r) => set({ rangeOverride: r, autoRange: false }),
   setAutoRange: (v) => set({ autoRange: v, rangeOverride: v ? null : get().rangeOverride }),
 
-  setTimestep: (t) => set({ timestep: t }),
+  setTimestep: (t) =>
+    set((s) => {
+      if (!s.syncTime && s.activeId) {
+        const ds = s.datasets.find((d) => d.id === s.activeId);
+        const clamped = ds ? Math.max(0, Math.min(t, ds.times.length - 1)) : t;
+        return {
+          timestep: clamped,
+          datasetTimesteps: { ...s.datasetTimesteps, [s.activeId]: clamped },
+        };
+      }
+      return { timestep: t };
+    }),
+  setDatasetTimestep: (id, t) =>
+    set((s) => ({
+      datasetTimesteps: { ...s.datasetTimesteps, [id]: t },
+    })),
+  getTimestepFor: (datasetId) => {
+    const s = get();
+    if (s.syncTime) return s.timestep;
+    const ds = s.datasets.find((d) => d.id === datasetId);
+    const dsMax = ds ? Math.max(0, ds.times.length - 1) : 0;
+    const stored = s.datasetTimesteps[datasetId];
+    if (stored === undefined) return Math.min(s.timestep, dsMax);
+    return Math.max(0, Math.min(stored, dsMax));
+  },
   setPlaying: (p) => set({ playback: { ...get().playback, playing: p } }),
   setFps: (f) => set({ playback: { ...get().playback, fps: f } }),
   setLoop: (l) => set({ playback: { ...get().playback, loop: l } }),
@@ -226,7 +262,25 @@ export const useCFDStore = create<CFDStore>((set, get) => ({
   setProjection: (p) => set({ projection: p }),
   setSyncCameras: (v) => set({ syncCameras: v }),
   setMasterCamera: (cam) => set({ masterCamera: cam }),
-  setSyncTime: (v) => set({ syncTime: v }),
+  setSyncTime: (v) =>
+    set((s) => {
+      if (!v) {
+        const active = s.datasets.find((d) => d.id === s.activeId);
+        const newTs: Record<string, number> = {};
+        for (const d of s.datasets) {
+          const maxT = Math.max(0, d.times.length - 1);
+          newTs[d.id] = Math.min(s.timestep, maxT);
+        }
+        const activeMax = active ? Math.max(0, active.times.length - 1) : 0;
+        const activeClamped = Math.min(s.timestep, activeMax);
+        return {
+          syncTime: false,
+          datasetTimesteps: newTs,
+          timestep: activeClamped,
+        };
+      }
+      return { syncTime: true };
+    }),
 
   setIsosurfaceValue: (v) => set({ isosurfaceValue: v }),
   setVectorDensity: (v) => set({ vectorDensity: v }),
