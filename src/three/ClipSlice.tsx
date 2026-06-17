@@ -14,19 +14,64 @@ interface ClipSliceProps {
   range: { min: number; max: number };
 }
 
+function normalize(v: Vec3): Vec3 {
+  const len = Math.hypot(v[0], v[1], v[2]) || 1;
+  return [v[0] / len, v[1] / len, v[2] / len];
+}
+
 function planeFromClip(clip: ClipState, bb: { min: Vec3; max: Vec3 }): { normal: Vec3; point: Vec3 } {
-  let normal: Vec3 = clip.normal;
+  let normal: Vec3;
   if (clip.axis === "x") normal = [1, 0, 0];
   else if (clip.axis === "y") normal = [0, 1, 0];
   else if (clip.axis === "z") normal = [0, 0, 1];
-  const axisIdx = clip.axis === "x" ? 0 : clip.axis === "y" ? 1 : 2;
-  const point: Vec3 = [
+  else normal = normalize(clip.normal);
+
+  const center: Vec3 = [
     (bb.min[0] + bb.max[0]) / 2,
     (bb.min[1] + bb.max[1]) / 2,
     (bb.min[2] + bb.max[2]) / 2,
   ];
-  point[axisIdx] = clip.position;
-  return { normal, point };
+
+  if (clip.axis === "x" || clip.axis === "y" || clip.axis === "z") {
+    const axisIdx = clip.axis === "x" ? 0 : clip.axis === "y" ? 1 : 2;
+    const point: Vec3 = [...center];
+    point[axisIdx] = clip.position;
+    return { normal, point };
+  }
+
+  const n = new THREE.Vector3(normal[0], normal[1], normal[2]).normalize();
+  const c = new THREE.Vector3(center[0], center[1], center[2]);
+  const point = c.clone().addScaledVector(n, clip.position);
+  return { normal: [n.x, n.y, n.z], point: [point.x, point.y, point.z] };
+}
+
+export function clipPositionRange(clip: ClipState, bb: { min: Vec3; max: Vec3 }): [number, number] {
+  if (clip.axis === "x") return [bb.min[0], bb.max[0]];
+  if (clip.axis === "y") return [bb.min[1], bb.max[1]];
+  if (clip.axis === "z") return [bb.min[2], bb.max[2]];
+
+  const normal = normalize(clip.normal);
+  const n = new THREE.Vector3(normal[0], normal[1], normal[2]);
+  const corners: THREE.Vector3[] = [];
+  for (let i = 0; i < 8; i++) {
+    corners.push(new THREE.Vector3(
+      i & 1 ? bb.max[0] : bb.min[0],
+      i & 2 ? bb.max[1] : bb.min[1],
+      i & 4 ? bb.max[2] : bb.min[2]
+    ));
+  }
+  let minD = Infinity, maxD = -Infinity;
+  const center = new THREE.Vector3(
+    (bb.min[0] + bb.max[0]) / 2,
+    (bb.min[1] + bb.max[1]) / 2,
+    (bb.min[2] + bb.max[2]) / 2
+  );
+  for (const c of corners) {
+    const d = n.dot(c.clone().sub(center));
+    if (d < minD) minD = d;
+    if (d > maxD) maxD = d;
+  }
+  return [minD, maxD];
 }
 
 export default function ClipSlice({ dataset, field, timestep, clip, colormapName, range }: ClipSliceProps) {

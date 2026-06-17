@@ -69,6 +69,7 @@ function parseVTKAscii(text: string, fileName: string): CFDataset {
   let idx = 0;
   const next = () => tokens[idx++];
   const nextNum = () => parseFloat(next());
+  const peek = (offset = 0) => tokens[idx + offset];
 
   let header = next();
   if (header && header.toUpperCase() === "#VTK") header = next();
@@ -81,12 +82,30 @@ function parseVTKAscii(text: string, fileName: string): CFDataset {
   const fields: Record<string, FieldData> = {};
   let bbox = { min: [0, 0, 0] as Vec3, max: [1, 1, 1] as Vec3 };
 
+  let structuredDims: number[] | null = null;
+  let structuredOrigin: number[] | null = null;
+  let structuredSpacing: number[] | null = null;
+  let datasetType: string | null = null;
+
+  const tryBuildStructured = () => {
+    if (points) return;
+    if (structuredDims && structuredOrigin && structuredSpacing) {
+      const result = buildStructuredMesh(structuredDims, structuredOrigin, structuredSpacing);
+      points = result.points;
+      cells = result.cells;
+      cellCount = result.cellCount;
+      cellType = "hex";
+      verticesPerCell = 8;
+      bbox = computeBoundingBox(points);
+    }
+  };
+
   while (idx < tokens.length) {
     const kw = next()?.toUpperCase();
     if (!kw) break;
 
     if (kw === "DATASET") {
-      next();
+      datasetType = next()?.toUpperCase() || null;
     } else if (kw === "POINTS") {
       const n = parseInt(next());
       next();
@@ -94,22 +113,23 @@ function parseVTKAscii(text: string, fileName: string): CFDataset {
       for (let i = 0; i < n * 3; i++) points[i] = nextNum();
       bbox = computeBoundingBox(points);
     } else if (kw === "STRUCTURED_POINTS") {
-      next();
+      datasetType = "STRUCTURED_POINTS";
       const dims = [parseInt(next()), parseInt(next()), parseInt(next())];
-      next();
       const origin = [nextNum(), nextNum(), nextNum()];
-      next();
       const spacing = [nextNum(), nextNum(), nextNum()];
-      const result = buildStructuredMesh(dims, origin, spacing);
-      points = result.points;
-      cells = result.cells;
-      cellCount = result.cellCount;
-      cellType = "hex";
-      verticesPerCell = 8;
-      bbox = computeBoundingBox(points);
-    } else if (kw === "DIMENSIONS" || kw === "ORIGIN" || kw === "SPACING") {
-      const n = 3;
-      for (let i = 0; i < n; i++) next();
+      structuredDims = dims;
+      structuredOrigin = origin;
+      structuredSpacing = spacing;
+      tryBuildStructured();
+    } else if (kw === "DIMENSIONS") {
+      structuredDims = [parseInt(next()), parseInt(next()), parseInt(next())];
+      tryBuildStructured();
+    } else if (kw === "ORIGIN") {
+      structuredOrigin = [nextNum(), nextNum(), nextNum()];
+      tryBuildStructured();
+    } else if (kw === "SPACING") {
+      structuredSpacing = [nextNum(), nextNum(), nextNum()];
+      tryBuildStructured();
     } else if (kw === "CELLS") {
       cellCount = parseInt(next());
       const size = parseInt(next());
@@ -123,15 +143,20 @@ function parseVTKAscii(text: string, fileName: string): CFDataset {
       const n = parseInt(next());
       for (let i = 0; i < n; i++) next();
     } else if (kw === "POINT_DATA") {
+      tryBuildStructured();
       const n = parseInt(next());
       while (idx < tokens.length) {
-        const sub = next()?.toUpperCase();
+        const sub = peek()?.toUpperCase();
         if (!sub) break;
         if (sub === "SCALARS") {
+          next();
           const name = next();
           next();
           next();
-          if (tokens[idx - 1]?.toUpperCase() === "LOOKUP_TABLE") next();
+          if (peek()?.toUpperCase() === "LOOKUP_TABLE") {
+            next();
+            next();
+          }
           const data = new Float32Array(n);
           for (let i = 0; i < n; i++) data[i] = nextNum();
           fields[name] = {
@@ -143,6 +168,7 @@ function parseVTKAscii(text: string, fileName: string): CFDataset {
             range: fieldRangeScalar(data),
           };
         } else if (sub === "VECTORS") {
+          next();
           const name = next();
           next();
           const data = new Float32Array(n * 3);
@@ -165,19 +191,29 @@ function parseVTKAscii(text: string, fileName: string): CFDataset {
         }
       }
     } else if (kw === "CELL_DATA") {
+      tryBuildStructured();
       const n = parseInt(next());
       while (idx < tokens.length) {
-        const sub = next()?.toUpperCase();
+        const sub = peek()?.toUpperCase();
         if (!sub) break;
         if (sub === "SCALARS" || sub === "VECTORS") {
           next();
           next();
+          next();
           if (sub === "SCALARS") {
-            if (tokens[idx - 1]?.toUpperCase() === "LOOKUP_TABLE") next();
+            if (peek()?.toUpperCase() === "LOOKUP_TABLE") {
+              next();
+              next();
+            }
             for (let i = 0; i < n; i++) next();
           } else {
             for (let i = 0; i < n * 3; i++) next();
           }
+        } else if (sub === "LOOKUP_TABLE") {
+          next();
+          const tblName = next();
+          const cnt = parseInt(next());
+          for (let i = 0; i < cnt * 4; i++) next();
         } else {
           break;
         }

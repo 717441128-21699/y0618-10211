@@ -42,6 +42,7 @@ interface CFDStore {
   showAxes: boolean;
   projection: "perspective" | "orthographic";
   syncCameras: boolean;
+  masterCamera: CameraState | null;
 
   isosurfaceValue: number;
   vectorDensity: number;
@@ -78,6 +79,7 @@ interface CFDStore {
   setShowAxes: (v: boolean) => void;
   setProjection: (p: "perspective" | "orthographic") => void;
   setSyncCameras: (v: boolean) => void;
+  setMasterCamera: (cam: CameraState | null) => void;
 
   setIsosurfaceValue: (v: number) => void;
   setVectorDensity: (v: number) => void;
@@ -113,6 +115,7 @@ export const useCFDStore = create<CFDStore>((set, get) => ({
   showAxes: true,
   projection: "perspective",
   syncCameras: true,
+  masterCamera: null,
 
   isosurfaceValue: 0.5,
   vectorDensity: 0.5,
@@ -182,6 +185,7 @@ export const useCFDStore = create<CFDStore>((set, get) => ({
   setShowAxes: (v) => set({ showAxes: v }),
   setProjection: (p) => set({ projection: p }),
   setSyncCameras: (v) => set({ syncCameras: v }),
+  setMasterCamera: (cam) => set({ masterCamera: cam }),
 
   setIsosurfaceValue: (v) => set({ isosurfaceValue: v }),
   setVectorDensity: (v) => set({ vectorDensity: v }),

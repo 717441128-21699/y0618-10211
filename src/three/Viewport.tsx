@@ -22,20 +22,67 @@ interface ViewportProps {
   isMaster?: boolean;
 }
 
-function CameraRig({ controlsRef }: { controlsRef?: React.MutableRefObject<any> }) {
+function CameraRig({
+  controlsRef,
+  isMaster,
+}: {
+  controlsRef: React.MutableRefObject<any>;
+  isMaster: boolean;
+}) {
   const { camera, gl } = useThree();
+  const store = useCFDStore();
+  const syncingRef = useRef(false);
+
   useEffect(() => {
     const cam = camera as THREE.PerspectiveCamera;
     cam.near = 0.01;
     cam.far = 1000;
     cam.updateProjectionMatrix();
   }, [camera]);
+
   useEffect(() => {
     const onCtx = (e: Event) => e.preventDefault();
     gl.domElement.addEventListener("contextmenu", onCtx);
     return () => gl.domElement.removeEventListener("contextmenu", onCtx);
   }, [gl]);
-  void controlsRef;
+
+  useEffect(() => {
+    const controls = controlsRef.current;
+    if (!controls || !isMaster) return;
+
+    const onChange = () => {
+      if (syncingRef.current) return;
+      const target = new THREE.Vector3();
+      controls.target.clone(target);
+      store.setMasterCamera({
+        position: [camera.position.x, camera.position.y, camera.position.z],
+        target: [target.x, target.y, target.z],
+        up: [camera.up.x, camera.up.y, camera.up.z],
+        projection: store.projection,
+      });
+    };
+    controls.addEventListener("change", onChange);
+    return () => controls.removeEventListener("change", onChange);
+  }, [isMaster, controlsRef, camera, store]);
+
+  useEffect(() => {
+    if (isMaster) return;
+    if (!store.syncCameras) return;
+    if (!store.masterCamera) return;
+    const controls = controlsRef.current;
+    if (!controls) return;
+
+    syncingRef.current = true;
+    const [px, py, pz] = store.masterCamera.position;
+    const [tx, ty, tz] = store.masterCamera.target;
+    const [ux, uy, uz] = store.masterCamera.up;
+    camera.position.set(px, py, pz);
+    camera.up.set(ux, uy, uz);
+    controls.target.set(tx, ty, tz);
+    controls.update();
+    syncingRef.current = false;
+  }, [store.masterCamera, store.syncCameras, isMaster, controlsRef, camera]);
+
   return null;
 }
 
@@ -102,24 +149,9 @@ export default function Viewport({
     [center, size]
   );
 
-  useEffect(() => {
-    if (cameraSyncRef && isMaster && localControls.current) {
-      cameraSyncRef.current = {
-        sync: (_cam: THREE.Camera) => {},
-        setCamera: (cam: THREE.Camera) => {
-          const c = cam as THREE.PerspectiveCamera;
-          if (localControls.current) {
-            localControls.current.object.position.copy(c.position);
-            localControls.current.target.copy((c as any).target ?? new THREE.Vector3());
-            localControls.current.update();
-          }
-        },
-      };
-    }
-  }, [cameraSyncRef, isMaster, localControls]);
+  void cameraSyncRef;
 
   const range = activeRange(dataset, store.activeField, store.rangeOverride, store.autoRange);
-
   const probes: Probe[] = store.probes;
 
   return (
@@ -134,7 +166,7 @@ export default function Viewport({
       }}
       dpr={[1, 1.8]}
     >
-      <CameraRig controlsRef={localControls} />
+      <CameraRig controlsRef={localControls} isMaster={isMaster} />
       <ambientLight intensity={0.5} />
       <directionalLight position={[size, size * 1.5, size]} intensity={1.1} />
       <directionalLight position={[-size, -size, size]} intensity={0.3} color="#36e2c8" />

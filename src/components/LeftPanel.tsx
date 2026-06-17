@@ -297,19 +297,51 @@ function ClipControl({ disabled }: { disabled: boolean }) {
   const dataset = store.getActive();
   const clip = store.clip;
   const bb = dataset?.mesh.boundingBox;
+
   const axisRange = bb
-    ? clip.axis === "x"
-      ? [bb.min[0], bb.max[0]]
-      : clip.axis === "y"
-      ? [bb.min[1], bb.max[1]]
-      : [bb.min[2], bb.max[2]]
+    ? (() => {
+        if (clip.axis === "x") return [bb.min[0], bb.max[0]];
+        if (clip.axis === "y") return [bb.min[1], bb.max[1]];
+        if (clip.axis === "z") return [bb.min[2], bb.max[2]];
+        const n = clip.normal;
+        const nl = Math.hypot(n[0], n[1], n[2]) || 1;
+        const nx = n[0] / nl, ny = n[1] / nl, nz = n[2] / nl;
+        const cx = (bb.min[0] + bb.max[0]) / 2;
+        const cy = (bb.min[1] + bb.max[1]) / 2;
+        const cz = (bb.min[2] + bb.max[2]) / 2;
+        let minD = Infinity, maxD = -Infinity;
+        for (let i = 0; i < 8; i++) {
+          const px = (i & 1) ? bb.max[0] : bb.min[0];
+          const py = (i & 2) ? bb.max[1] : bb.min[1];
+          const pz = (i & 4) ? bb.max[2] : bb.min[2];
+          const d = nx * (px - cx) + ny * (py - cy) + nz * (pz - cz);
+          if (d < minD) minD = d;
+          if (d > maxD) maxD = d;
+        }
+        return [minD, maxD];
+      })()
     : [0, 1];
 
   const axes: { key: ClipAxis; label: string }[] = [
     { key: "x", label: "YZ / X" },
     { key: "y", label: "XZ / Y" },
     { key: "z", label: "XY / Z" },
+    { key: "custom", label: "任意法向" },
   ];
+
+  const handleNormalChange = (comp: number, val: number) => {
+    const n = [...clip.normal] as [number, number, number];
+    n[comp] = val;
+    store.setClip({ normal: n });
+  };
+
+  const fmt = (v: number) => {
+    const a = Math.abs(v);
+    if (a >= 1e4 || (a < 1e-3 && a > 0)) return v.toExponential(1);
+    if (a >= 100) return v.toFixed(0);
+    if (a >= 1) return v.toFixed(2);
+    return v.toFixed(3);
+  };
 
   return (
     <>
@@ -325,18 +357,51 @@ function ClipControl({ disabled }: { disabled: boolean }) {
         </button>
       </section>
       <div className="p-3 space-y-2">
-        <div className="grid grid-cols-3 gap-1">
+        <div className="grid grid-cols-4 gap-1">
           {axes.map((a) => (
             <button
               key={a.key}
               className={`btn h-6 text-[9px] ${clip.axis === a.key ? "btn-active" : ""}`}
-              onClick={() => store.setClip({ axis: a.key })}
+              onClick={() => {
+                if (a.key === "custom" && clip.axis !== "custom") {
+                  store.setClip({ axis: a.key, position: 0 });
+                } else {
+                  store.setClip({ axis: a.key });
+                }
+              }}
               disabled={disabled || !clip.enabled}
             >
               {a.label}
             </button>
           ))}
         </div>
+
+        {clip.axis === "custom" && (
+          <div className="space-y-1.5 pt-1 border-t border-line/60">
+            <div className="field-label">法线方向 N</div>
+            <div className="grid grid-cols-3 gap-1.5">
+              {["X", "Y", "Z"].map((label, i) => (
+                <div key={label} className="space-y-0.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-[8px] text-ink-500 uppercase">{label}</span>
+                    <span className="font-mono text-[8px] text-ink-400 tabular-nums">{fmt(clip.normal[i])}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={-1}
+                    max={1}
+                    step={0.01}
+                    value={clip.normal[i]}
+                    disabled={disabled || !clip.enabled}
+                    className="w-full h-1"
+                    onChange={(e) => handleNormalChange(i, parseFloat(e.target.value))}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex items-center justify-between font-mono text-[10px]">
           <span className="text-ink-500">POS</span>
           <span className="text-accent-cyan tabular-nums">{clip.position.toFixed(3)}</span>

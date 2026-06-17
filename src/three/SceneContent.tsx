@@ -37,17 +37,35 @@ export default function SceneContent(props: SceneContentProps) {
 
   const clippingPlanes = useMemo<THREE.Plane[]>(() => {
     if (!clip.enabled) return [];
-    const normal = new THREE.Vector3(clip.normal[0], clip.normal[1], clip.normal[2]).normalize();
-    const axisIdx = clip.axis === "x" ? 0 : clip.axis === "y" ? 1 : 2;
     const bb = dataset.mesh.boundingBox;
-    const point: [number, number, number] = [
+    const center: [number, number, number] = [
       (bb.min[0] + bb.max[0]) / 2,
       (bb.min[1] + bb.max[1]) / 2,
       (bb.min[2] + bb.max[2]) / 2,
     ];
-    point[axisIdx] = clip.position;
+
+    let normal: [number, number, number];
+    let point: [number, number, number];
+
+    if (clip.axis === "x" || clip.axis === "y" || clip.axis === "z") {
+      const axisIdx = clip.axis === "x" ? 0 : clip.axis === "y" ? 1 : 2;
+      normal = clip.axis === "x" ? [1, 0, 0] : clip.axis === "y" ? [0, 1, 0] : [0, 0, 1];
+      point = [...center];
+      point[axisIdx] = clip.position;
+    } else {
+      const nl = Math.hypot(clip.normal[0], clip.normal[1], clip.normal[2]) || 1;
+      const nx = clip.normal[0] / nl, ny = clip.normal[1] / nl, nz = clip.normal[2] / nl;
+      normal = [nx, ny, nz];
+      point = [
+        center[0] + nx * clip.position,
+        center[1] + ny * clip.position,
+        center[2] + nz * clip.position,
+      ];
+    }
+
+    const n = new THREE.Vector3(normal[0], normal[1], normal[2]);
     const p = new THREE.Vector3(point[0], point[1], point[2]);
-    return [new THREE.Plane().setFromNormalAndCoplanarPoint(normal.negate(), p)];
+    return [new THREE.Plane().setFromNormalAndCoplanarPoint(n.clone().negate(), p)];
   }, [clip.enabled, clip.axis, clip.position, clip.normal, dataset]);
 
   const showSurface = mode === "pressure" || mode === "velocity" || mode === "mesh";
