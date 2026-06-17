@@ -1,0 +1,207 @@
+import { create } from "zustand";
+import type {
+  CFDataset,
+  VisualizationMode,
+  ColormapName,
+  Probe,
+  ClipState,
+  CameraState,
+} from "@/types/cfd";
+
+const PROBE_COLORS = ["#36e2c8", "#ffb347", "#ff4d8d", "#8b7bff", "#7ed957", "#ff7eb6"];
+
+interface PlaybackState {
+  playing: boolean;
+  fps: number;
+  loop: boolean;
+}
+
+interface RangeOverride {
+  min: number;
+  max: number;
+}
+
+interface CFDStore {
+  datasets: CFDataset[];
+  activeId: string | null;
+
+  mode: VisualizationMode;
+  colormap: ColormapName;
+  activeField: string;
+  rangeOverride: RangeOverride | null;
+  autoRange: boolean;
+
+  timestep: number;
+  playback: PlaybackState;
+
+  probes: Probe[];
+  selectedProbeId: string | null;
+
+  clip: ClipState;
+  showGrid: boolean;
+  showAxes: boolean;
+  projection: "perspective" | "orthographic";
+  syncCameras: boolean;
+
+  isosurfaceValue: number;
+  vectorDensity: number;
+  vectorScale: number;
+  streamlineDensity: number;
+
+  loading: boolean;
+  error: string | null;
+
+  setDataset: (ds: CFDataset) => void;
+  addDataset: (ds: CFDataset) => void;
+  removeDataset: (id: string) => void;
+  setActive: (id: string) => void;
+
+  setMode: (m: VisualizationMode) => void;
+  setColormap: (c: ColormapName) => void;
+  setActiveField: (f: string) => void;
+  setRange: (r: RangeOverride | null) => void;
+  setAutoRange: (v: boolean) => void;
+
+  setTimestep: (t: number) => void;
+  setPlaying: (p: boolean) => void;
+  setFps: (f: number) => void;
+  setLoop: (l: boolean) => void;
+
+  addProbe: (p: [number, number, number]) => void;
+  removeProbe: (id: string) => void;
+  selectProbe: (id: string | null) => void;
+  clearProbes: () => void;
+
+  setClip: (c: Partial<ClipState>) => void;
+
+  setShowGrid: (v: boolean) => void;
+  setShowAxes: (v: boolean) => void;
+  setProjection: (p: "perspective" | "orthographic") => void;
+  setSyncCameras: (v: boolean) => void;
+
+  setIsosurfaceValue: (v: number) => void;
+  setVectorDensity: (v: number) => void;
+  setVectorScale: (v: number) => void;
+  setStreamlineDensity: (v: number) => void;
+
+  setLoading: (v: boolean) => void;
+  setError: (e: string | null) => void;
+
+  getActive: () => CFDataset | null;
+}
+
+let probeCounter = 0;
+
+export const useCFDStore = create<CFDStore>((set, get) => ({
+  datasets: [],
+  activeId: null,
+
+  mode: "pressure",
+  colormap: "jet",
+  activeField: "pressure",
+  rangeOverride: null,
+  autoRange: true,
+
+  timestep: 0,
+  playback: { playing: false, fps: 6, loop: true },
+
+  probes: [],
+  selectedProbeId: null,
+
+  clip: { enabled: false, axis: "z", position: 0, normal: [0, 0, 1] },
+  showGrid: false,
+  showAxes: true,
+  projection: "perspective",
+  syncCameras: true,
+
+  isosurfaceValue: 0.5,
+  vectorDensity: 0.5,
+  vectorScale: 1,
+  streamlineDensity: 0.5,
+
+  loading: false,
+  error: null,
+
+  setDataset: (ds) =>
+    set((s) => {
+      const exists = s.datasets.some((d) => d.id === ds.id);
+      const datasets = exists ? s.datasets.map((d) => (d.id === ds.id ? ds : d)) : [...s.datasets, ds];
+      const activeId = s.activeId ?? ds.id;
+      const firstField = ds.fields.pressure ? "pressure" : Object.keys(ds.fields)[0] ?? "pressure";
+      return {
+        datasets,
+        activeId,
+        timestep: 0,
+        activeField: s.activeField in ds.fields ? s.activeField : firstField,
+        clip: { ...s.clip, position: 0 },
+      };
+    }),
+  addDataset: (ds) =>
+    set((s) => ({ datasets: [...s.datasets, ds], activeId: s.activeId ?? ds.id })),
+  removeDataset: (id) =>
+    set((s) => {
+      const datasets = s.datasets.filter((d) => d.id !== id);
+      const activeId = s.activeId === id ? datasets[0]?.id ?? null : s.activeId;
+      return { datasets, activeId };
+    }),
+  setActive: (id) => set({ activeId: id }),
+
+  setMode: (m) => set({ mode: m }),
+  setColormap: (c) => set({ colormap: c }),
+  setActiveField: (f) => set({ activeField: f, autoRange: true, rangeOverride: null }),
+  setRange: (r) => set({ rangeOverride: r, autoRange: false }),
+  setAutoRange: (v) => set({ autoRange: v, rangeOverride: v ? null : get().rangeOverride }),
+
+  setTimestep: (t) => set({ timestep: t }),
+  setPlaying: (p) => set({ playback: { ...get().playback, playing: p } }),
+  setFps: (f) => set({ playback: { ...get().playback, fps: f } }),
+  setLoop: (l) => set({ playback: { ...get().playback, loop: l } }),
+
+  addProbe: (p) =>
+    set((s) => {
+      probeCounter += 1;
+      const id = `p${probeCounter}`;
+      const color = PROBE_COLORS[(probeCounter - 1) % PROBE_COLORS.length];
+      const probe: Probe = {
+        id,
+        position: [+p[0].toFixed(4), +p[1].toFixed(4), +p[2].toFixed(4)],
+        field: s.activeField,
+        label: `PROBE-${String(probeCounter).padStart(2, "0")}`,
+        color,
+      };
+      return { probes: [...s.probes, probe], selectedProbeId: id };
+    }),
+  removeProbe: (id) =>
+    set((s) => ({ probes: s.probes.filter((p) => p.id !== id), selectedProbeId: s.selectedProbeId === id ? null : s.selectedProbeId })),
+  selectProbe: (id) => set({ selectedProbeId: id }),
+  clearProbes: () => set({ probes: [], selectedProbeId: null }),
+
+  setClip: (c) => set((s) => ({ clip: { ...s.clip, ...c } })),
+
+  setShowGrid: (v) => set({ showGrid: v }),
+  setShowAxes: (v) => set({ showAxes: v }),
+  setProjection: (p) => set({ projection: p }),
+  setSyncCameras: (v) => set({ syncCameras: v }),
+
+  setIsosurfaceValue: (v) => set({ isosurfaceValue: v }),
+  setVectorDensity: (v) => set({ vectorDensity: v }),
+  setVectorScale: (v) => set({ vectorScale: v }),
+  setStreamlineDensity: (v) => set({ streamlineDensity: v }),
+
+  setLoading: (v) => set({ loading: v }),
+  setError: (e) => set({ error: e }),
+
+  getActive: () => {
+    const s = get();
+    return s.datasets.find((d) => d.id === s.activeId) ?? null;
+  },
+}));
+
+export function activeRange(dataset: CFDataset | null, field: string, override: RangeOverride | null, auto: boolean) {
+  if (!dataset || !dataset.fields[field]) return { min: 0, max: 1 };
+  if (!auto && override) return override;
+  return dataset.fields[field].range;
+}
+
+export type { CFDStore };
+export type { CameraState };
