@@ -73,6 +73,21 @@ function CameraRig({
   }, [isMaster, controlsRef, camera, store]);
 
   useEffect(() => {
+    if (!isMaster) return;
+    if (!store.syncCameras) return;
+    const controls = controlsRef.current;
+    if (!controls) return;
+    const target = new THREE.Vector3();
+    controls.target.clone(target);
+    store.setMasterCamera({
+      position: [camera.position.x, camera.position.y, camera.position.z],
+      target: [target.x, target.y, target.z],
+      up: [camera.up.x, camera.up.y, camera.up.z],
+      projection: store.projection,
+    });
+  }, [store.syncCameras]);
+
+  useEffect(() => {
     if (isMaster) return;
     if (!store.syncCameras) return;
     if (!store.masterCamera) return;
@@ -218,6 +233,11 @@ export default function Viewport({
         streamlineDensity={store.streamlineDensity}
         showGrid={store.showGrid}
         isosurfaceValue={store.isosurfaceValue}
+        sectionProbes={store.sectionProbes}
+        sectionProbeMode={store.sectionProbeMode}
+        onAddSectionProbe={(p) => store.addSectionProbe(p)}
+        onUpdateSectionProbe={(id, p) => store.updateSectionProbe(id, p)}
+        onRemoveSectionProbe={(id) => store.removeSectionProbe(id)}
       />
 
       <ProbePlacer active={probePlacement} dataset={dataset} onPlace={(p) => onPlaceProbe?.(p)} />

@@ -46,6 +46,7 @@ export function sliceToCSV(
     sum += v;
   }
   const meanVal = count > 0 ? sum / count : 0;
+  const stats = { min: minVal, max: maxVal, mean: meanVal, pointCount: count };
 
   const fieldData = dataset.fields[field];
   const isVector = fieldData?.type === "vector";
@@ -54,7 +55,12 @@ export function sliceToCSV(
     ? ["x", "y", "z", `${field}_x`, `${field}_y`, `${field}_z`, `${field}_magnitude`]
     : ["x", "y", "z", field];
 
-  const rows: string[] = [header.join(",")];
+  const rows: string[] = [];
+  rows.push(`# HYDROSCOPE Section Export`);
+  rows.push(`# dataset=${dataset.name} field=${field} timestep=${timestep}`);
+  rows.push(`# normal=[${normal.map((n) => n.toFixed(4)).join(",")}] point=[${point.map((p) => p.toFixed(4)).join(",")}]`);
+  rows.push(`# stats: min=${minVal.toFixed(6)} mean=${meanVal.toFixed(6)} max=${maxVal.toFixed(6)} points=${count}`);
+  rows.push(header.join(","));
   for (let i = 0; i < count; i++) {
     const x = positions[i * 3].toFixed(6);
     const y = positions[i * 3 + 1].toFixed(6);
@@ -73,10 +79,26 @@ export function sliceToCSV(
     }
   }
 
-  return {
-    csv: rows.join("\n"),
-    stats: { min: minVal, max: maxVal, mean: meanVal, pointCount: count },
-  };
+  return { csv: rows.join("\n"), stats };
+}
+
+export async function downloadSliceReport(
+  dataset: CFDataset,
+  clip: ClipState,
+  field: string,
+  timestep: number,
+  canvas: HTMLCanvasElement | null
+): Promise<void> {
+  const { csv, stats } = sliceToCSV(dataset, clip, field, timestep);
+  const axisLabel = clip.axis === "custom" ? "custom" : clip.axis.toUpperCase();
+  const base = `slice_${axisLabel}_${clip.position.toFixed(3)}_${field}`;
+  downloadText(`${base}.csv`, csv);
+
+  if (canvas) {
+    await new Promise((r) => setTimeout(r, 80));
+    await exportCanvasImage(canvas, `${base}.png`, 2);
+  }
+  void stats;
 }
 
 export function probesToCSV(

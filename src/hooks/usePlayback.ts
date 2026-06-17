@@ -1,12 +1,13 @@
 import { useEffect, useRef } from "react";
-import { useCFDStore } from "@/store/useCFDStore";
+import { useCFDStore, maxTimestepCount } from "@/store/useCFDStore";
 
-export function usePlayback() {
+export function usePlayback(compare = false) {
   const store = useCFDStore();
   const { playing, fps, loop } = store.playback;
   const timestep = store.timestep;
   const timer = useRef<number | null>(null);
   const dataset = store.getActive();
+  const datasets = store.datasets;
 
   useEffect(() => {
     if (!playing) {
@@ -16,7 +17,9 @@ export function usePlayback() {
       }
       return;
     }
-    const total = dataset?.times.length ?? 1;
+    const activeTotal = dataset?.times.length ?? 1;
+    const globalTotal = compare && store.syncTime ? maxTimestepCount(datasets) : activeTotal;
+    const total = Math.max(activeTotal, globalTotal);
     if (total <= 1) {
       useCFDStore.getState().setPlaying(false);
       return;
@@ -25,12 +28,14 @@ export function usePlayback() {
     const tick = () => {
       const s = useCFDStore.getState();
       const t = s.timestep;
-      const max = (s.getActive()?.times.length ?? 1) - 1;
+      const aTotal = s.getActive()?.times.length ?? 1;
+      const gTotal = compare && s.syncTime ? maxTimestepCount(s.datasets) : aTotal;
+      const maxStep = Math.max(aTotal, gTotal) - 1;
       let next = t + 1;
-      if (next > max) {
+      if (next > maxStep) {
         if (loop) next = 0;
         else {
-          s.setTimestep(max);
+          s.setTimestep(maxStep);
           s.setPlaying(false);
           return;
         }
@@ -45,5 +50,5 @@ export function usePlayback() {
         timer.current = null;
       }
     };
-  }, [playing, fps, loop, dataset, timestep]);
+  }, [playing, fps, loop, dataset, timestep, compare, store.syncTime, datasets]);
 }

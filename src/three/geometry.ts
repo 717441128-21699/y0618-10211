@@ -6,7 +6,6 @@ export function extractBoundaryTriangles(mesh: MeshData): { indices: Uint32Array
   if (cells.length === 0) {
     return { indices: mesh.indices, count: mesh.indices.length / 3 };
   }
-  const vpc = mesh.verticesPerCell;
   const faceTable = new Map<string, number[]>();
   const faceList: number[][] = [];
 
@@ -32,7 +31,8 @@ export function extractBoundaryTriangles(mesh: MeshData): { indices: Uint32Array
       addFace(v[2], v[6], v[7]); addFace(v[2], v[7], v[3]);
       addFace(v[3], v[7], v[4]); addFace(v[3], v[4], v[0]);
     } else if (mesh.cellType === "quad" && n === 4) {
-      addFace(v[0], v[1], v2tri(v, 0, 1, 2));
+      addFace(v[0], v[1], v[2]);
+      addFace(v[0], v[2], v[3]);
     } else if (mesh.cellType === "tetra" && n === 4) {
       addFace(v[0], v[1], v[2]);
       addFace(v[0], v[2], v[3]);
@@ -51,10 +51,6 @@ export function extractBoundaryTriangles(mesh: MeshData): { indices: Uint32Array
     }
   }
   return { indices: new Uint32Array(out), count: out.length / 3 };
-}
-
-function v2tri(v: number[], a: number, b: number, c: number): number {
-  return v[c];
 }
 
 export function buildGeometry(mesh: MeshData, boundaryOnly: boolean): THREE.BufferGeometry {
@@ -124,6 +120,8 @@ export function sliceMesh(dataset: CFDataset, plane: PlaneDef, maxPoints = 20000
     ? [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]]
     : mesh.cellType === "tetra"
     ? [[0,1],[1,2],[2,0],[0,3],[1,3],[2,3]]
+    : mesh.cellType === "quad"
+    ? [[0,1],[1,2],[2,3],[3,0]]
     : [[0,1],[1,2],[2,0]];
   while (o < cells.length) {
     const n = cells[o++];

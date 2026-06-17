@@ -9,7 +9,7 @@ import { SAMPLE_DATASETS } from "@/utils/sampleData";
 
 export default function Compare() {
   const store = useCFDStore();
-  usePlayback();
+  usePlayback(true);
   const cameraSyncRef = useRef<{
     sync: (cam: any) => void;
     setCamera: (cam: any) => void;
@@ -99,7 +99,7 @@ export default function Compare() {
         )}
       </div>
 
-      {active && <Timeline compact />}
+      {active && <Timeline compact datasets={datasetsToCompare} />}
 
       {datasetsToCompare.length > 0 && datasetsToCompare.length < 3 && (
         <div className="flex h-10 items-center gap-2 border-t border-line bg-ink-900/95 px-4">

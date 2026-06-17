@@ -12,12 +12,13 @@ import {
   Plus,
   ChevronDown,
   Layers3,
+  Crosshair,
 } from "lucide-react";
 import { useCFDStore, activeRange } from "@/store/useCFDStore";
 import { parseCFDFiles } from "@/utils/parsers";
 import { SAMPLE_DATASETS } from "@/utils/sampleData";
 import { COLORMAP_OPTIONS, colormapCss } from "@/utils/colormaps";
-import { sliceToCSV, downloadText } from "@/utils/exporters";
+import { sliceToCSV, downloadText, downloadSliceReport } from "@/utils/exporters";
 import type { VisualizationMode, ColormapName, ClipAxis } from "@/types/cfd";
 
 const MODES: { key: VisualizationMode; label: string; icon: typeof Layers }[] = [
@@ -29,7 +30,7 @@ const MODES: { key: VisualizationMode; label: string; icon: typeof Layers }[] = 
   { key: "mesh", label: "网格线框", icon: Boxes },
 ];
 
-export default function LeftPanel() {
+export default function LeftPanel({ canvasRef }: { canvasRef?: React.RefObject<HTMLCanvasElement | null> }) {
   const store = useCFDStore();
   const fileRef = useRef<HTMLInputElement>(null);
   const [importing, setImporting] = useState(false);
@@ -186,7 +187,7 @@ export default function LeftPanel() {
         disabled={!dataset}
       />
 
-      <ClipControl disabled={!dataset} />
+      <ClipControl disabled={!dataset} canvasRef={canvasRef} />
 
       {store.error && (
         <div className="mx-3 mb-3 rounded-[2px] border border-accent-magenta/40 bg-accent-magenta/5 p-2">
@@ -302,7 +303,7 @@ function RangeControl({
   );
 }
 
-function ClipControl({ disabled }: { disabled: boolean }) {
+function ClipControl({ disabled, canvasRef }: { disabled: boolean; canvasRef?: React.RefObject<HTMLCanvasElement | null> }) {
   const store = useCFDStore();
   const dataset = store.getActive();
   const clip = store.clip;
@@ -361,6 +362,11 @@ function ClipControl({ disabled }: { disabled: boolean }) {
     const axisLabel = clip.axis === "custom" ? "custom" : clip.axis.toUpperCase();
     const fname = `slice_${axisLabel}_${clip.position.toFixed(3)}_${store.activeField}.csv`;
     downloadText(fname, csv);
+  };
+
+  const handleExportReport = async () => {
+    if (!dataset) return;
+    await downloadSliceReport(dataset, clip, store.activeField, store.timestep, canvasRef?.current ?? null);
   };
 
   const fmt = (v: number) => {
@@ -472,6 +478,63 @@ function ClipControl({ disabled }: { disabled: boolean }) {
             >
               <FileBox className="h-3 w-3" strokeWidth={1.5} />
               导出截面 CSV
+            </button>
+          </div>
+        )}
+
+        {clip.enabled && (
+          <div className="space-y-1.5 pt-2 border-t border-line/60">
+            <div className="field-label flex items-center justify-between">
+              <span>截面测点</span>
+              <span className="text-ink-500">{store.sectionProbes.length} 个</span>
+            </div>
+            <div className="flex gap-1">
+              <button
+                className={`btn h-6 flex-1 text-[9px] ${store.sectionProbeMode ? "btn-active !text-accent-amber !border-accent-amber/60" : ""}`}
+                onClick={() => store.setSectionProbeMode(!store.sectionProbeMode)}
+                disabled={disabled}
+              >
+                <Crosshair className="h-3 w-3" strokeWidth={1.5} />
+                {store.sectionProbeMode ? "点击截面放置" : "放置测点"}
+              </button>
+              <button
+                className="btn h-6 text-[9px]"
+                onClick={() => store.clearSectionProbes()}
+                disabled={disabled || store.sectionProbes.length === 0}
+                title="清空截面测点"
+              >
+                清空
+              </button>
+            </div>
+            {store.sectionProbes.length > 0 && (
+              <div className="space-y-0.5">
+                {store.sectionProbes.map((p) => (
+                  <div key={p.id} className="flex items-center gap-1 font-mono text-[8px] text-ink-300">
+                    <span className="h-1.5 w-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: p.color }} />
+                    <span className="flex-1 truncate">{p.label}</span>
+                    <span className="text-ink-500 tabular-nums">
+                      {p.position.map((v) => v.toFixed(2)).join(", ")}
+                    </span>
+                    <button
+                      className="text-ink-600 hover:text-accent-magenta"
+                      onClick={() => store.removeSectionProbe(p.id)}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="font-mono text-[7px] text-ink-600 uppercase tracking-wider">
+              拖动测点移动 · 双击标签删除
+            </p>
+            <button
+              className="w-full btn h-7 text-[9px] !text-accent-violet !border-accent-violet/50"
+              onClick={handleExportReport}
+              disabled={disabled}
+            >
+              <FileBox className="h-3 w-3" strokeWidth={1.5} />
+              一键导出报告 (CSV + PNG)
             </button>
           </div>
         )}

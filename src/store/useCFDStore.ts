@@ -37,12 +37,16 @@ interface CFDStore {
   probes: Probe[];
   selectedProbeId: string | null;
 
+  sectionProbes: Probe[];
+  sectionProbeMode: boolean;
+
   clip: ClipState;
   showGrid: boolean;
   showAxes: boolean;
   projection: "perspective" | "orthographic";
   syncCameras: boolean;
   masterCamera: CameraState | null;
+  syncTime: boolean;
 
   isosurfaceValue: number;
   vectorDensity: number;
@@ -73,6 +77,12 @@ interface CFDStore {
   selectProbe: (id: string | null) => void;
   clearProbes: () => void;
 
+  addSectionProbe: (p: [number, number, number]) => void;
+  updateSectionProbe: (id: string, p: [number, number, number]) => void;
+  removeSectionProbe: (id: string) => void;
+  clearSectionProbes: () => void;
+  setSectionProbeMode: (v: boolean) => void;
+
   setClip: (c: Partial<ClipState>) => void;
 
   setShowGrid: (v: boolean) => void;
@@ -80,6 +90,7 @@ interface CFDStore {
   setProjection: (p: "perspective" | "orthographic") => void;
   setSyncCameras: (v: boolean) => void;
   setMasterCamera: (cam: CameraState | null) => void;
+  setSyncTime: (v: boolean) => void;
 
   setIsosurfaceValue: (v: number) => void;
   setVectorDensity: (v: number) => void;
@@ -110,12 +121,16 @@ export const useCFDStore = create<CFDStore>((set, get) => ({
   probes: [],
   selectedProbeId: null,
 
+  sectionProbes: [],
+  sectionProbeMode: false,
+
   clip: { enabled: false, axis: "z", position: 0, normal: [0, 0, 1] },
   showGrid: false,
   showAxes: true,
   projection: "perspective",
   syncCameras: true,
   masterCamera: null,
+  syncTime: true,
 
   isosurfaceValue: 0.5,
   vectorDensity: 0.5,
@@ -179,6 +194,31 @@ export const useCFDStore = create<CFDStore>((set, get) => ({
   selectProbe: (id) => set({ selectedProbeId: id }),
   clearProbes: () => set({ probes: [], selectedProbeId: null }),
 
+  addSectionProbe: (p) =>
+    set((s) => {
+      probeCounter += 1;
+      const id = `s${probeCounter}`;
+      const color = PROBE_COLORS[(probeCounter - 1) % PROBE_COLORS.length];
+      const probe: Probe = {
+        id,
+        position: [+p[0].toFixed(4), +p[1].toFixed(4), +p[2].toFixed(4)],
+        field: s.activeField,
+        label: `SEC-${String(probeCounter).padStart(2, "0")}`,
+        color,
+      };
+      return { sectionProbes: [...s.sectionProbes, probe] };
+    }),
+  updateSectionProbe: (id, p) =>
+    set((s) => ({
+      sectionProbes: s.sectionProbes.map((pr) =>
+        pr.id === id ? { ...pr, position: [+p[0].toFixed(4), +p[1].toFixed(4), +p[2].toFixed(4)] } : pr
+      ),
+    })),
+  removeSectionProbe: (id) =>
+    set((s) => ({ sectionProbes: s.sectionProbes.filter((p) => p.id !== id) })),
+  clearSectionProbes: () => set({ sectionProbes: [] }),
+  setSectionProbeMode: (v) => set({ sectionProbeMode: v }),
+
   setClip: (c) => set((s) => ({ clip: { ...s.clip, ...c } })),
 
   setShowGrid: (v) => set({ showGrid: v }),
@@ -186,6 +226,7 @@ export const useCFDStore = create<CFDStore>((set, get) => ({
   setProjection: (p) => set({ projection: p }),
   setSyncCameras: (v) => set({ syncCameras: v }),
   setMasterCamera: (cam) => set({ masterCamera: cam }),
+  setSyncTime: (v) => set({ syncTime: v }),
 
   setIsosurfaceValue: (v) => set({ isosurfaceValue: v }),
   setVectorDensity: (v) => set({ vectorDensity: v }),
@@ -205,6 +246,15 @@ export function activeRange(dataset: CFDataset | null, field: string, override: 
   if (!dataset || !dataset.fields[field]) return { min: 0, max: 1 };
   if (!auto && override) return override;
   return dataset.fields[field].range;
+}
+
+export function maxTimestepCount(datasets: CFDataset[]): number {
+  let m = 1;
+  for (const d of datasets) {
+    const n = d.times.length;
+    if (n > m) m = n;
+  }
+  return m;
 }
 
 export type { CFDStore };

@@ -7,18 +7,25 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Link2,
+  Unlink,
 } from "lucide-react";
-import { useCFDStore } from "@/store/useCFDStore";
+import { useCFDStore, maxTimestepCount } from "@/store/useCFDStore";
+import type { CFDataset } from "@/types/cfd";
 
 interface TimelineProps {
   compact?: boolean;
+  datasets?: CFDataset[];
 }
 
-export default function Timeline({ compact = false }: TimelineProps) {
+export default function Timeline({ compact = false, datasets }: TimelineProps) {
   const store = useCFDStore();
   const dataset = store.getActive();
   const times = dataset?.times ?? [0];
-  const total = times.length;
+
+  const compareMode = !!datasets && datasets.length > 1;
+  const globalMaxCount = compareMode ? maxTimestepCount(datasets!) : times.length;
+  const total = compareMode && store.syncTime ? globalMaxCount : times.length;
   const max = Math.max(0, total - 1);
 
   const fmt = (v: number) => {
@@ -77,7 +84,7 @@ export default function Timeline({ compact = false }: TimelineProps) {
 
       <div className="flex-1 flex items-center gap-2">
         <span className="font-mono text-[9px] tabular-nums text-ink-400 w-12 text-right">
-          {fmt(times[store.timestep])}
+          {fmt(times[Math.min(store.timestep, times.length - 1)])}
         </span>
         <div className="relative flex-1">
           <input
@@ -90,8 +97,8 @@ export default function Timeline({ compact = false }: TimelineProps) {
             onChange={(e) => store.setTimestep(parseInt(e.target.value))}
           />
           <div className="pointer-events-none mt-1 flex justify-between font-mono text-[7px] text-ink-600">
-            {times.length <= 12 &&
-              times.map((_, i) => (
+            {total <= 12 &&
+              Array.from({ length: total }, (_, i) => (
                 <span key={i} className={i === store.timestep ? "text-accent-cyan" : ""}>
                   |
                 </span>
@@ -99,11 +106,21 @@ export default function Timeline({ compact = false }: TimelineProps) {
           </div>
         </div>
         <span className="font-mono text-[9px] tabular-nums text-ink-400 w-12">
-          {fmt(times[max])}
+          {fmt(times[Math.min(max, times.length - 1)])}
         </span>
       </div>
 
       <div className="flex items-center gap-1.5">
+        {compareMode && (
+          <button
+            className={`btn h-7 ${store.syncTime ? "btn-active !text-accent-cyan !border-accent-cyan/60" : ""}`}
+            onClick={() => store.setSyncTime(!store.syncTime)}
+            title={store.syncTime ? "时间已同步" : "时间独立"}
+          >
+            {store.syncTime ? <Link2 className="h-3 w-3" strokeWidth={1.5} /> : <Unlink className="h-3 w-3" strokeWidth={1.5} />}
+            <span className="ml-1 text-[8px]">{store.syncTime ? "同步" : "独立"}</span>
+          </button>
+        )}
         <button
           className={`btn h-7 ${store.playback.loop ? "btn-active" : ""}`}
           onClick={() => store.setLoop(!store.playback.loop)}

@@ -6,6 +6,7 @@ import VelocityVectors from "./VelocityVectors";
 import Streamlines from "./Streamlines";
 import ClipSlice, { ClipPlaneFrame } from "./ClipSlice";
 import Probes from "./Probes";
+import SectionProbes from "./SectionProbes";
 import { buildColormapTexture } from "@/utils/colormaps";
 import { createFieldSurfaceMaterial } from "./fieldMaterial";
 import { buildGeometry, fieldAttribute } from "./geometry";
@@ -26,6 +27,11 @@ export interface SceneContentProps {
   streamlineDensity: number;
   showGrid: boolean;
   isosurfaceValue: number;
+  sectionProbes?: Probe[];
+  sectionProbeMode?: boolean;
+  onAddSectionProbe?: (p: [number, number, number]) => void;
+  onUpdateSectionProbe?: (id: string, p: [number, number, number]) => void;
+  onRemoveSectionProbe?: (id: string) => void;
 }
 
 export default function SceneContent(props: SceneContentProps) {
@@ -33,6 +39,7 @@ export default function SceneContent(props: SceneContentProps) {
     dataset, mode, field, timestep, colormap, range, clip,
     probes, selectedProbeId, onSelectProbe,
     vectorDensity, vectorScale, streamlineDensity, showGrid, isosurfaceValue,
+    sectionProbes, sectionProbeMode, onAddSectionProbe, onUpdateSectionProbe, onRemoveSectionProbe,
   } = props;
 
   const clippingPlanes = useMemo<THREE.Plane[]>(() => {
@@ -140,6 +147,19 @@ export default function SceneContent(props: SceneContentProps) {
         />
       )}
       {clip.enabled && <ClipPlaneFrame dataset={dataset} clip={clip} />}
+      {clip.enabled && sectionProbes && onAddSectionProbe && onUpdateSectionProbe && onRemoveSectionProbe && (
+        <SectionProbes
+          dataset={dataset}
+          clip={clip}
+          probes={sectionProbes}
+          field={field}
+          timestep={timestep}
+          placeMode={!!sectionProbeMode}
+          onAdd={onAddSectionProbe}
+          onUpdate={onUpdateSectionProbe}
+          onRemove={onRemoveSectionProbe}
+        />
+      )}
       {showGrid && <BoundaryGrid dataset={dataset} />}
       <Probes probes={probes} selectedId={selectedProbeId} onSelect={onSelectProbe} />
     </group>

@@ -31,7 +31,7 @@ export default function Home() {
     <div className="flex h-full w-full flex-col overflow-hidden bg-ink-950">
       <TopBar canvasRef={canvasRef} recorderRef={recorderRef} />
       <div className="relative flex flex-1 overflow-hidden">
-        <LeftPanel />
+        <LeftPanel canvasRef={canvasRef} />
         <main className="relative flex-1 overflow-hidden bg-ink-950">
           <div className="absolute inset-0 bg-grid bg-[length:24px_24px] opacity-40" />
           {dataset ? (
