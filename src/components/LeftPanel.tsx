@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useMemo } from "react";
 import {
   Upload,
   Layers,
@@ -11,11 +11,13 @@ import {
   FileBox,
   Plus,
   ChevronDown,
+  Layers3,
 } from "lucide-react";
 import { useCFDStore, activeRange } from "@/store/useCFDStore";
-import { parseCFDFile } from "@/utils/parsers";
+import { parseCFDFiles } from "@/utils/parsers";
 import { SAMPLE_DATASETS } from "@/utils/sampleData";
 import { COLORMAP_OPTIONS, colormapCss } from "@/utils/colormaps";
+import { sliceToCSV, downloadText } from "@/utils/exporters";
 import type { VisualizationMode, ColormapName, ClipAxis } from "@/types/cfd";
 
 const MODES: { key: VisualizationMode; label: string; icon: typeof Layers }[] = [
@@ -34,11 +36,13 @@ export default function LeftPanel() {
   const [dragOver, setDragOver] = useState(false);
   const dataset = store.getActive();
 
-  const handleFile = async (file: File) => {
+  const handleFiles = async (files: FileList | File[]) => {
+    const fileArr = Array.from(files);
+    if (fileArr.length === 0) return;
     setImporting(true);
     store.setError(null);
     try {
-      const ds = await parseCFDFile(file);
+      const ds = await parseCFDFiles(fileArr);
       store.setDataset(ds);
     } catch (e) {
       store.setError((e as Error).message);
@@ -71,16 +75,22 @@ export default function LeftPanel() {
           onDrop={(e) => {
             e.preventDefault();
             setDragOver(false);
-            const f = e.dataTransfer.files[0];
-            if (f) handleFile(f);
+            if (e.dataTransfer.files.length > 0) {
+              handleFiles(e.dataTransfer.files);
+            }
           }}
         >
           <input
             ref={fileRef}
             type="file"
             accept=".vtk,.json,.vtu"
+            multiple
             className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+            onChange={(e) => {
+              if (e.target.files && e.target.files.length > 0) {
+                handleFiles(e.target.files);
+              }
+            }}
           />
           <button
             className="w-full btn btn-primary h-9 text-[11px]"
@@ -91,7 +101,7 @@ export default function LeftPanel() {
             {importing ? "解析中…" : "导入网格文件"}
           </button>
           <p className="mt-2 text-center font-mono text-[8px] uppercase tracking-wider text-ink-500">
-            拖拽 .vtk / .json 至此处
+            拖拽 .vtk / .json 至此处 · 支持多选时间步
           </p>
         </div>
 
@@ -322,6 +332,16 @@ function ClipControl({ disabled }: { disabled: boolean }) {
       })()
     : [0, 1];
 
+  const sliceStats = useMemo(() => {
+    if (!dataset || !clip.enabled) return null;
+    try {
+      const { stats } = sliceToCSV(dataset, clip, store.activeField, store.timestep);
+      return stats;
+    } catch {
+      return null;
+    }
+  }, [dataset, clip, store.activeField, store.timestep, clip.enabled, clip.axis, clip.position, clip.normal[0], clip.normal[1], clip.normal[2]]);
+
   const axes: { key: ClipAxis; label: string }[] = [
     { key: "x", label: "YZ / X" },
     { key: "y", label: "XZ / Y" },
@@ -333,6 +353,14 @@ function ClipControl({ disabled }: { disabled: boolean }) {
     const n = [...clip.normal] as [number, number, number];
     n[comp] = val;
     store.setClip({ normal: n });
+  };
+
+  const handleExportCSV = () => {
+    if (!dataset) return;
+    const { csv } = sliceToCSV(dataset, clip, store.activeField, store.timestep);
+    const axisLabel = clip.axis === "custom" ? "custom" : clip.axis.toUpperCase();
+    const fname = `slice_${axisLabel}_${clip.position.toFixed(3)}_${store.activeField}.csv`;
+    downloadText(fname, csv);
   };
 
   const fmt = (v: number) => {
@@ -416,6 +444,38 @@ function ClipControl({ disabled }: { disabled: boolean }) {
           className="w-full"
           onChange={(e) => store.setClip({ position: parseFloat(e.target.value) })}
         />
+
+        {clip.enabled && sliceStats && (
+          <div className="space-y-1 pt-2 border-t border-line/60">
+            <div className="field-label flex items-center justify-between">
+              <span>截面统计 · {store.activeField}</span>
+              <span className="text-ink-500">{sliceStats.pointCount} pts</span>
+            </div>
+            <div className="grid grid-cols-3 gap-1">
+              <div className="rounded-[2px] bg-ink-950/60 px-1.5 py-1">
+                <div className="font-mono text-[7px] text-ink-500 uppercase">MIN</div>
+                <div className="font-mono text-[10px] text-accent-amber tabular-nums">{fmt(sliceStats.min)}</div>
+              </div>
+              <div className="rounded-[2px] bg-ink-950/60 px-1.5 py-1">
+                <div className="font-mono text-[7px] text-ink-500 uppercase">MEAN</div>
+                <div className="font-mono text-[10px] text-ink-200 tabular-nums">{fmt(sliceStats.mean)}</div>
+              </div>
+              <div className="rounded-[2px] bg-ink-950/60 px-1.5 py-1">
+                <div className="font-mono text-[7px] text-ink-500 uppercase">MAX</div>
+                <div className="font-mono text-[10px] text-accent-cyan tabular-nums">{fmt(sliceStats.max)}</div>
+              </div>
+            </div>
+            <button
+              className="w-full btn h-7 text-[9px] mt-1"
+              onClick={handleExportCSV}
+              disabled={disabled || !sliceStats.pointCount}
+            >
+              <FileBox className="h-3 w-3" strokeWidth={1.5} />
+              导出截面 CSV
+            </button>
+          </div>
+        )}
+
         <div className="flex items-center gap-1.5 pt-1">
           <SlidersHorizontal className="h-3 w-3 text-ink-500" strokeWidth={1.5} />
           <ChevronDown className="h-3 w-3 text-ink-500" strokeWidth={1.5} />

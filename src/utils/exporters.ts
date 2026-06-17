@@ -1,5 +1,83 @@
-import type { CFDataset, Probe, Vec3 } from "@/types/cfd";
+import type { CFDataset, Probe, Vec3, ClipState } from "@/types/cfd";
 import { sampleFieldAtPoint } from "./streamlines";
+import { sliceMesh } from "@/three/geometry";
+
+export function sliceToCSV(
+  dataset: CFDataset,
+  clip: ClipState,
+  field: string,
+  timestep: number
+): { csv: string; stats: { min: number; max: number; mean: number; pointCount: number } } {
+  const bb = dataset.mesh.boundingBox;
+  const center: Vec3 = [
+    (bb.min[0] + bb.max[0]) / 2,
+    (bb.min[1] + bb.max[1]) / 2,
+    (bb.min[2] + bb.max[2]) / 2,
+  ];
+
+  let normal: Vec3;
+  let point: Vec3;
+
+  if (clip.axis === "x" || clip.axis === "y" || clip.axis === "z") {
+    const axisIdx = clip.axis === "x" ? 0 : clip.axis === "y" ? 1 : 2;
+    normal = clip.axis === "x" ? [1, 0, 0] : clip.axis === "y" ? [0, 1, 0] : [0, 0, 1];
+    point = [...center];
+    point[axisIdx] = clip.position;
+  } else {
+    const nl = Math.hypot(clip.normal[0], clip.normal[1], clip.normal[2]) || 1;
+    const nx = clip.normal[0] / nl, ny = clip.normal[1] / nl, nz = clip.normal[2] / nl;
+    normal = [nx, ny, nz];
+    point = [
+      center[0] + nx * clip.position,
+      center[1] + ny * clip.position,
+      center[2] + nz * clip.position,
+    ];
+  }
+
+  const { positions, values, count } = sliceMesh(dataset, { normal, point }, 200000, field, timestep);
+
+  let minVal = Infinity;
+  let maxVal = -Infinity;
+  let sum = 0;
+  for (let i = 0; i < count; i++) {
+    const v = values[i];
+    if (v < minVal) minVal = v;
+    if (v > maxVal) maxVal = v;
+    sum += v;
+  }
+  const meanVal = count > 0 ? sum / count : 0;
+
+  const fieldData = dataset.fields[field];
+  const isVector = fieldData?.type === "vector";
+
+  const header = isVector
+    ? ["x", "y", "z", `${field}_x`, `${field}_y`, `${field}_z`, `${field}_magnitude`]
+    : ["x", "y", "z", field];
+
+  const rows: string[] = [header.join(",")];
+  for (let i = 0; i < count; i++) {
+    const x = positions[i * 3].toFixed(6);
+    const y = positions[i * 3 + 1].toFixed(6);
+    const z = positions[i * 3 + 2].toFixed(6);
+    if (isVector) {
+      const res = sampleFieldAtPoint(dataset, field, timestep, [
+        positions[i * 3],
+        positions[i * 3 + 1],
+        positions[i * 3 + 2],
+      ]);
+      rows.push(
+        [x, y, z, res.vector[0].toFixed(6), res.vector[1].toFixed(6), res.vector[2].toFixed(6), res.magnitude.toFixed(6)].join(",")
+      );
+    } else {
+      rows.push([x, y, z, values[i].toFixed(6)].join(","));
+    }
+  }
+
+  return {
+    csv: rows.join("\n"),
+    stats: { min: minVal, max: maxVal, mean: meanVal, pointCount: count },
+  };
+}
 
 export function probesToCSV(
   dataset: CFDataset,

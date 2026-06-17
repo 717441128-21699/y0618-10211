@@ -94,8 +94,8 @@ function parseVTKAscii(text: string, fileName: string): CFDataset {
       points = result.points;
       cells = result.cells;
       cellCount = result.cellCount;
-      cellType = "hex";
-      verticesPerCell = 8;
+      cellType = result.cellType;
+      verticesPerCell = result.verticesPerCell;
       bbox = computeBoundingBox(points);
     }
   };
@@ -245,6 +245,61 @@ function buildStructuredMesh(dims: number[], origin: number[], spacing: number[]
         points[p++] = origin[1] + j * spacing[1];
         points[p++] = origin[2] + k * spacing[2];
       }
+
+  const is2D = nx === 1 || ny === 1 || nz === 1;
+
+  if (is2D) {
+    let cellType: CellType = "quad";
+    let cellCount = 0;
+    let cells: Uint32Array;
+
+    if (nz === 1) {
+      cellCount = (nx - 1) * (ny - 1);
+      cells = new Uint32Array(cellCount * 5);
+      let c = 0;
+      for (let j = 0; j < ny - 1; j++) {
+        for (let i = 0; i < nx - 1; i++) {
+          const base = i + j * nx;
+          cells[c++] = 4;
+          cells[c++] = base;
+          cells[c++] = base + 1;
+          cells[c++] = base + 1 + nx;
+          cells[c++] = base + nx;
+        }
+      }
+    } else if (ny === 1) {
+      cellCount = (nx - 1) * (nz - 1);
+      cells = new Uint32Array(cellCount * 5);
+      let c = 0;
+      for (let k = 0; k < nz - 1; k++) {
+        for (let i = 0; i < nx - 1; i++) {
+          const base = i + k * nx * ny;
+          cells[c++] = 4;
+          cells[c++] = base;
+          cells[c++] = base + 1;
+          cells[c++] = base + 1 + nx * ny;
+          cells[c++] = base + nx * ny;
+        }
+      }
+    } else {
+      cellCount = (ny - 1) * (nz - 1);
+      cells = new Uint32Array(cellCount * 5);
+      let c = 0;
+      for (let k = 0; k < nz - 1; k++) {
+        for (let j = 0; j < ny - 1; j++) {
+          const base = j * nx + k * nx * ny;
+          cells[c++] = 4;
+          cells[c++] = base;
+          cells[c++] = base + nx;
+          cells[c++] = base + nx + nx * ny;
+          cells[c++] = base + nx * ny;
+        }
+      }
+    }
+
+    return { points, cells, cellCount, cellType: "quad" as CellType, verticesPerCell: 4 };
+  }
+
   const ccx = Math.max(1, nx - 1);
   const ccy = Math.max(1, ny - 1);
   const ccz = Math.max(1, nz - 1);
@@ -265,7 +320,7 @@ function buildStructuredMesh(dims: number[], origin: number[], spacing: number[]
         cells[c++] = base + 1 + nx + nx * ny;
         cells[c++] = base + nx + nx * ny;
       }
-  return { points, cells, cellCount };
+  return { points, cells, cellCount, cellType: "hex" as CellType, verticesPerCell: 8 };
 }
 
 function decodeCells(raw: number[], cellCount: number) {

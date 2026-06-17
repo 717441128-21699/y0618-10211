@@ -25,13 +25,16 @@ interface ViewportProps {
 function CameraRig({
   controlsRef,
   isMaster,
+  viewportIndex,
 }: {
   controlsRef: React.MutableRefObject<any>;
   isMaster: boolean;
+  viewportIndex?: number;
 }) {
   const { camera, gl } = useThree();
   const store = useCFDStore();
   const syncingRef = useRef(false);
+  const lastSyncTimeRef = useRef(0);
 
   useEffect(() => {
     const cam = camera as THREE.PerspectiveCamera;
@@ -52,6 +55,10 @@ function CameraRig({
 
     const onChange = () => {
       if (syncingRef.current) return;
+      if (!store.syncCameras) return;
+      const now = Date.now();
+      if (now - lastSyncTimeRef.current < 16) return;
+      lastSyncTimeRef.current = now;
       const target = new THREE.Vector3();
       controls.target.clone(target);
       store.setMasterCamera({
@@ -80,9 +87,32 @@ function CameraRig({
     camera.up.set(ux, uy, uz);
     controls.target.set(tx, ty, tz);
     controls.update();
-    syncingRef.current = false;
+    requestAnimationFrame(() => {
+      syncingRef.current = false;
+    });
   }, [store.masterCamera, store.syncCameras, isMaster, controlsRef, camera]);
 
+  useEffect(() => {
+    if (isMaster) return;
+    if (!store.syncCameras) return;
+    const controls = controlsRef.current;
+    if (!controls) return;
+    if (!store.masterCamera) return;
+
+    syncingRef.current = true;
+    const [px, py, pz] = store.masterCamera.position;
+    const [tx, ty, tz] = store.masterCamera.target;
+    const [ux, uy, uz] = store.masterCamera.up;
+    camera.position.set(px, py, pz);
+    camera.up.set(ux, uy, uz);
+    controls.target.set(tx, ty, tz);
+    controls.update();
+    requestAnimationFrame(() => {
+      syncingRef.current = false;
+    });
+  }, [store.syncCameras]);
+
+  void viewportIndex;
   return null;
 }
 
